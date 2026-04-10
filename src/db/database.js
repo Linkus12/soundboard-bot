@@ -71,7 +71,7 @@ if (!columnExists('sounds', 'match_name')) {
 // Done synchronously at boot — soundboards are small.
 {
   const rows = db
-    .prepare('SELECT id, name FROM sounds WHERE match_name IS NULL OR match_name = ""')
+    .prepare("SELECT id, name FROM sounds WHERE match_name IS NULL OR match_name = ''")
     .all();
   if (rows.length > 0) {
     const upd = db.prepare('UPDATE sounds SET match_name = ? WHERE id = ?');
