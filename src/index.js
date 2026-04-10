@@ -1,4 +1,5 @@
 import { REST, Routes } from 'discord.js';
+import { generateDependencyReport } from '@discordjs/voice';
 import { config } from './config.js';
 import { logger } from './logger.js';
 import { createBot } from './bot.js';
@@ -25,6 +26,10 @@ async function main() {
     node: process.version,
     env: process.env.NODE_ENV || 'development'
   });
+
+  // Log voice dependency report so we can spot missing sodium/opus fast
+  const depReport = generateDependencyReport();
+  logger.info('voice dependency report:\n' + depReport);
 
   await registerSlashCommands();
 

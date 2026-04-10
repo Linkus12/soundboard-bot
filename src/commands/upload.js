@@ -11,21 +11,30 @@ import {
   checkStorageWarning,
   formatBytes
 } from '../storage.js';
+import { isAdmin } from '../admins.js';
 import { logger } from '../logger.js';
 
 const NAME_REGEX = /^[\w-]{1,32}$/;
-const MAX_INPUT_SIZE_BYTES = 100 * 1024 * 1024; // 100MB raw upload cap
+// Hardcoded absolute ceiling — applies even to admins.
+const ADMIN_HARD_CAP_MB = 200;
+const ADMIN_HARD_CAP_BYTES = ADMIN_HARD_CAP_MB * 1024 * 1024;
+// Raw pre-conversion input cap for regular users.
+const USER_INPUT_CAP_BYTES = 100 * 1024 * 1024;
 
 export async function handleUpload(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const attachment = interaction.options.getAttachment('file');
-  const name = interaction.options.getString('name').trim();
+  const admin = isAdmin(interaction.user.id);
 
-  // --- Validate name --------------------------------------------------------
+  // --- Normalize & validate name -------------------------------------------
+  // Accept names with spaces, collapse runs of whitespace into a single underscore.
+  const rawName = interaction.options.getString('name').trim();
+  const name = rawName.replace(/\s+/g, '_');
+
   if (!NAME_REGEX.test(name)) {
     return interaction.editReply(
-      'Name must be 1-32 characters: letters, numbers, underscores, or hyphens only.'
+      'Name must be 1-32 characters. Allowed: letters, numbers, underscores, hyphens, and spaces (spaces become underscores).'
     );
   }
 
@@ -33,34 +42,40 @@ export async function handleUpload(interaction) {
     return interaction.editReply(`A sound named **${name}** already exists. Pick a different name.`);
   }
 
-  // --- Check user's personal upload cap -------------------------------------
-  const userCount = queries.countByUploader.get(interaction.user.id).count;
-  if (userCount >= config.maxSoundsPerUser) {
-    return interaction.editReply(
-      `You've reached the max of **${config.maxSoundsPerUser}** uploaded sounds. ` +
-        `Use \`/sb delete\` to remove some first.`
-    );
+  // --- Check user's personal upload cap (admins bypass) --------------------
+  if (!admin) {
+    const userCount = queries.countByUploader.get(interaction.user.id).count;
+    if (userCount >= config.maxSoundsPerUser) {
+      return interaction.editReply(
+        `You've reached the max of **${config.maxSoundsPerUser}** uploaded sounds. ` +
+          `Use \`/sb delete\` to remove some first.`
+      );
+    }
   }
 
-  // --- Storage hard lock ----------------------------------------------------
+  // --- Storage hard lock (applies to everyone, even admins) ----------------
   const totalBytes = getTotalBytes();
   if (totalBytes >= getHardLimitBytes()) {
     logger.warn('upload blocked — storage hard cap reached', {
       userId: interaction.user.id,
-      total: totalBytes
+      total: totalBytes,
+      asAdmin: admin
     });
     return interaction.editReply(
       `🚫 Storage is full (**${formatBytes(totalBytes)}** / ${config.storageHardGB} GB hard limit). ` +
-        `Ask an admin to free space before uploading.`
+        `Delete some sounds before uploading.`
     );
   }
 
   // --- Raw attachment sanity ------------------------------------------------
-  if (attachment.size > MAX_INPUT_SIZE_BYTES) {
+  // Admins: up to the hardcoded 200MB absolute ceiling.
+  // Users: up to USER_INPUT_CAP_BYTES (100MB).
+  const maxInputBytes = admin ? ADMIN_HARD_CAP_BYTES : USER_INPUT_CAP_BYTES;
+  if (attachment.size > maxInputBytes) {
     return interaction.editReply(
-      `Input file too large (${formatBytes(attachment.size)}). Max accepted upload is ${formatBytes(
-        MAX_INPUT_SIZE_BYTES
-      )}.`
+      `Input file too large (${formatBytes(attachment.size)}). Max for ${
+        admin ? 'admins' : 'users'
+      } is ${formatBytes(maxInputBytes)}.`
     );
   }
 
@@ -94,7 +109,8 @@ export async function handleUpload(interaction) {
       );
     }
 
-    if (duration > config.maxDurationSeconds) {
+    // Admins bypass the duration cap entirely (limited only by the 200MB file ceiling).
+    if (!admin && duration > config.maxDurationSeconds) {
       safeUnlink(tempInput);
       return interaction.editReply(
         `Sound is too long: **${duration.toFixed(1)}s**. Max is **${config.maxDurationSeconds}s**.`
@@ -120,12 +136,16 @@ export async function handleUpload(interaction) {
     safeUnlink(tempInput);
 
     // --- Post-conversion size check ----------------------------------------
+    // Admins: capped at the hardcoded 200MB ceiling.
+    // Users: capped at config.maxFileSizeMB.
     const stats = fs.statSync(outPath);
-    const maxBytes = config.maxFileSizeMB * 1024 * 1024;
+    const maxBytes = admin ? ADMIN_HARD_CAP_BYTES : config.maxFileSizeMB * 1024 * 1024;
     if (stats.size > maxBytes) {
       safeUnlink(outPath);
       return interaction.editReply(
-        `Converted file is too large: **${formatBytes(stats.size)}**. Max is **${config.maxFileSizeMB} MB**.`
+        `Converted file is too large: **${formatBytes(stats.size)}**. Max for ${
+          admin ? `admins is ${ADMIN_HARD_CAP_MB} MB` : `users is ${config.maxFileSizeMB} MB`
+        }.`
       );
     }
 
@@ -145,11 +165,13 @@ export async function handleUpload(interaction) {
       name,
       userId: interaction.user.id,
       size: stats.size,
-      duration
+      duration,
+      asAdmin: admin
     });
 
+    const renamed = name !== rawName ? ` (stored as **${name}**)` : '';
     await interaction.editReply(
-      `✅ Uploaded **${name}** — ${duration.toFixed(1)}s, ${formatBytes(stats.size)}.\n` +
+      `✅ Uploaded **${name}**${renamed} — ${duration.toFixed(1)}s, ${formatBytes(stats.size)}.\n` +
         `Play it with \`/sb play name:${name}\`.`
     );
 

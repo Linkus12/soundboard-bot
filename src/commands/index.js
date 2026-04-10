@@ -13,7 +13,7 @@ export const commandData = new SlashCommandBuilder()
       .addStringOption(o =>
         o
           .setName('name')
-          .setDescription('Sound name (letters, numbers, underscore, hyphen — 1-32 chars)')
+          .setDescription('Sound name (letters, numbers, underscores, hyphens, spaces — 1-32 chars)')
           .setRequired(true)
           .setMinLength(1)
           .setMaxLength(32)

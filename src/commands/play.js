@@ -75,6 +75,10 @@ export async function handlePlay(interaction) {
   }
 
   // --- Play -----------------------------------------------------------------
+  // Defer here — voice connection can take >3s, which would expire the interaction token.
+  // Quick pre-play validation above stays as non-deferred ephemeral replies.
+  await interaction.deferReply();
+
   try {
     const result = await playSound(
       interaction.guild,
@@ -85,7 +89,7 @@ export async function handlePlay(interaction) {
     );
 
     const suffix = result.overlapping > 1 ? ` (${result.overlapping} sounds overlapping)` : '';
-    await interaction.reply({
+    await interaction.editReply({
       content: `▶ Playing **${sound.name}**${suffix}`
     });
   } catch (err) {
@@ -94,9 +98,8 @@ export async function handlePlay(interaction) {
       sound: sound.name,
       err: err.message
     });
-    await interaction.reply({
-      content: `Failed to play **${sound.name}**: ${err.message}`,
-      flags: MessageFlags.Ephemeral
+    await interaction.editReply({
+      content: `Failed to play **${sound.name}**: ${err.message}`
     });
   }
 }
