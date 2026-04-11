@@ -131,6 +131,13 @@ function buildSlashCommand(name) {
     .addSubcommand(s =>
       withVisibility(
         s
+          .setName('spam')
+          .setDescription(`${LOCK}Play every sound at once for 7s (admin only)`)
+      )
+    )
+    .addSubcommand(s =>
+      withVisibility(
+        s
           .setName('pause')
           .setDescription('Pause playback (initiator/admin: instant, others: vote)')
       )

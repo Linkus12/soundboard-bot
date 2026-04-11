@@ -8,6 +8,7 @@ import { handlePlay } from './commands/play.js';
 import { handleDelete } from './commands/delete.js';
 import { handleList } from './commands/list.js';
 import { handleStop, handleStopVoteButton } from './commands/stop.js';
+import { handleSpam } from './commands/spam.js';
 import { handleStorage } from './commands/storage.js';
 import {
   handleAdminAdd,
@@ -110,6 +111,8 @@ export function createBot() {
             return handleList(interaction);
           case 'stop':
             return handleStop(interaction);
+          case 'spam':
+            return handleSpam(interaction);
           case 'pause':
             return handlePause(interaction);
           case 'resume':
