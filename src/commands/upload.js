@@ -10,7 +10,7 @@ import {
   checkStorageWarning,
   formatBytes
 } from '../storage.js';
-import { isAdmin } from '../admins.js';
+import { isAdmin, isOwner } from '../admins.js';
 import { getSetting } from '../settings.js';
 import { storeName, displayName, canonicalize } from '../names.js';
 import { logger } from '../logger.js';
@@ -27,6 +27,7 @@ export async function handleUpload(interaction) {
 
   const attachment = interaction.options.getAttachment('file');
   const guild = interaction.guild;
+  const owner = isOwner(interaction.user.id);
   const admin = isAdmin(guild, interaction.user.id);
 
   // --- Normalize & validate name -------------------------------------------
@@ -53,8 +54,8 @@ export async function handleUpload(interaction) {
   const maxFileSizeMB = getSetting(guild.id, 'max_file_size_mb');
   const uploadScope = getSetting(guild.id, 'upload_scope');
 
-  // --- Check user's personal upload cap (admins bypass) --------------------
-  if (!admin) {
+  // --- Check user's personal upload cap (admins & owner bypass) -----------
+  if (!admin && !owner) {
     const userCount = queries.countByUploader.get(interaction.user.id).count;
     if (userCount >= maxSoundsPerUser) {
       return interaction.editReply(
@@ -64,10 +65,10 @@ export async function handleUpload(interaction) {
     }
   }
 
-  // --- Storage hard lock (applies to everyone, even admins) ----------------
+  // --- Storage hard lock (applies to everyone except the bot owner) --------
   const totalBytes = getTotalBytes();
   const hardLimitBytes = getEffectiveHardLimitBytes(guild.id);
-  if (totalBytes >= hardLimitBytes) {
+  if (!owner && totalBytes >= hardLimitBytes) {
     logger.warn('upload blocked — storage hard cap reached', {
       userId: interaction.user.id,
       total: totalBytes,
@@ -81,15 +82,18 @@ export async function handleUpload(interaction) {
   }
 
   // --- Raw attachment sanity ------------------------------------------------
+  // Owner: no cap at all.
   // Admins: up to the hardcoded 200MB absolute ceiling.
   // Users: up to USER_INPUT_CAP_BYTES (100MB).
-  const maxInputBytes = admin ? ADMIN_HARD_CAP_BYTES : USER_INPUT_CAP_BYTES;
-  if (attachment.size > maxInputBytes) {
-    return interaction.editReply(
-      `Input file too large (${formatBytes(attachment.size)}). Max for ${
-        admin ? 'admins' : 'users'
-      } is ${formatBytes(maxInputBytes)}.`
-    );
+  if (!owner) {
+    const maxInputBytes = admin ? ADMIN_HARD_CAP_BYTES : USER_INPUT_CAP_BYTES;
+    if (attachment.size > maxInputBytes) {
+      return interaction.editReply(
+        `Input file too large (${formatBytes(attachment.size)}). Max for ${
+          admin ? 'admins' : 'users'
+        } is ${formatBytes(maxInputBytes)}.`
+      );
+    }
   }
 
   // --- Download to temp -----------------------------------------------------
@@ -122,8 +126,8 @@ export async function handleUpload(interaction) {
       );
     }
 
-    // Admins bypass the duration cap entirely (limited only by the 200MB file ceiling).
-    if (!admin && duration > maxDurationSeconds) {
+    // Admins & owner bypass the duration cap entirely.
+    if (!admin && !owner && duration > maxDurationSeconds) {
       safeUnlink(tempInput);
       return interaction.editReply(
         `Sound is too long: **${duration.toFixed(1)}s**. Max is **${maxDurationSeconds}s**.`
@@ -149,17 +153,20 @@ export async function handleUpload(interaction) {
     safeUnlink(tempInput);
 
     // --- Post-conversion size check ----------------------------------------
+    // Owner: no cap.
     // Admins: capped at the hardcoded 200MB ceiling.
     // Users: capped at the per-guild max_file_size_mb setting.
     const stats = fs.statSync(outPath);
-    const maxBytes = admin ? ADMIN_HARD_CAP_BYTES : maxFileSizeMB * 1024 * 1024;
-    if (stats.size > maxBytes) {
-      safeUnlink(outPath);
-      return interaction.editReply(
-        `Converted file is too large: **${formatBytes(stats.size)}**. Max for ${
-          admin ? `admins is ${ADMIN_HARD_CAP_MB} MB` : `users is ${maxFileSizeMB} MB`
-        }.`
-      );
+    if (!owner) {
+      const maxBytes = admin ? ADMIN_HARD_CAP_BYTES : maxFileSizeMB * 1024 * 1024;
+      if (stats.size > maxBytes) {
+        safeUnlink(outPath);
+        return interaction.editReply(
+          `Converted file is too large: **${formatBytes(stats.size)}**. Max for ${
+            admin ? `admins is ${ADMIN_HARD_CAP_MB} MB` : `users is ${maxFileSizeMB} MB`
+          }.`
+        );
+      }
     }
 
     // --- Persist to DB ------------------------------------------------------
