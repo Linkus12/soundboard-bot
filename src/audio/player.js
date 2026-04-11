@@ -46,9 +46,17 @@ function updateActivity(client) {
   if (latestSound && activeChannelId) {
     const channel = client.channels.cache.get(activeChannelId);
     const channelName = channel ? channel.name : 'Unknown';
-    client.user.setActivity(`${latestSound} in ${channelName}`, { type: ActivityType.Playing });
+    client.user.setActivity({
+      name: 'Custom Status',
+      state: `🔊 Playing ${latestSound} in ${channelName}`,
+      type: ActivityType.Custom
+    });
   } else {
-    client.user.setActivity('nothing', { type: ActivityType.Playing });
+    client.user.setActivity({
+      name: 'Custom Status',
+      state: '💤 Playing nothing',
+      type: ActivityType.Custom
+    });
   }
 }
 

@@ -41,7 +41,11 @@ export function createBot() {
       id: c.user.id,
       guilds: c.guilds.cache.size
     });
-    c.user.setActivity('nothing', { type: ActivityType.Playing });
+    c.user.setActivity({
+      name: 'Custom Status',
+      state: '💤 Playing nothing',
+      type: ActivityType.Custom
+    });
   });
 
   client.on(Events.InteractionCreate, async interaction => {
