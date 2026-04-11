@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { PermissionFlagsBits } from 'discord.js';
 import { config } from '../config.js';
 import { queries } from '../db/database.js';
-import { getSession, playSound, stopSession } from '../audio/player.js';
+import { getSession, playSound, stopSession, markSpamming } from '../audio/player.js';
 import { isAdmin } from '../admins.js';
 import { getSetting } from '../settings.js';
 import { logger } from '../logger.js';
@@ -118,6 +118,10 @@ export async function handleSpam(interaction) {
   // If the session drains / someone else stops it / a new one starts before
   // our timeout fires, the identity check keeps us from clobbering it.
   const spamSession = getSession(guild.id);
+
+  // Flip the presence into spam mode so it shows "💣 Spamming #channel"
+  // instead of flickering through 13 different sound names.
+  markSpamming(guild.id, true);
 
   setTimeout(() => {
     const current = getSession(guild.id);

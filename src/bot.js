@@ -28,6 +28,7 @@ import {
   handlePauseVoteButton,
   handleResumeVoteButton
 } from './commands/pause.js';
+import { scheduleDismiss } from './commands/visibility.js';
 
 // Both /sb and /soundboard route to the same handlers.
 const COMMAND_NAMES = new Set(['sb', 'soundboard']);
@@ -55,76 +56,33 @@ export function createBot() {
       if (interaction.isChatInputCommand() && COMMAND_NAMES.has(interaction.commandName)) {
         // All soundboard commands require a guild (voice)
         if (!interaction.inGuild()) {
-          return interaction.reply({
+          await interaction.reply({
             content: 'Soundboard commands only work in a server.',
             flags: MessageFlags.Ephemeral
           });
+          scheduleDismiss(interaction);
+          return;
         }
 
         const group = interaction.options.getSubcommandGroup(false);
         const sub = interaction.options.getSubcommand();
 
-        if (group === 'admin') {
-          switch (sub) {
-            case 'add':
-              return handleAdminAdd(interaction);
-            case 'remove':
-              return handleAdminRemove(interaction);
-            case 'list':
-              return handleAdminList(interaction);
-            default:
-              return interaction.reply({
-                content: `Unknown admin subcommand: ${sub}`,
-                flags: MessageFlags.Ephemeral
-              });
-          }
+        const handler = resolveHandler(group, sub);
+        if (handler) {
+          await handler(interaction);
+        } else {
+          const label = group ? `${group} ${sub}` : sub;
+          await interaction.reply({
+            content: `Unknown subcommand: ${label}`,
+            flags: MessageFlags.Ephemeral
+          });
         }
 
-        if (group === 'settings') {
-          switch (sub) {
-            case 'view':
-              return handleSettingsView(interaction);
-            case 'set':
-              return handleSettingsSet(interaction);
-            case 'unset':
-              return handleSettingsUnset(interaction);
-            default:
-              return interaction.reply({
-                content: `Unknown settings subcommand: ${sub}`,
-                flags: MessageFlags.Ephemeral
-              });
-          }
-        }
-
-        switch (sub) {
-          case 'upload':
-            return handleUpload(interaction);
-          case 'play':
-            return handlePlay(interaction);
-          case 'edit':
-            return handleEdit(interaction);
-          case 'cut':
-            return handleCut(interaction);
-          case 'delete':
-            return handleDelete(interaction);
-          case 'list':
-            return handleList(interaction);
-          case 'stop':
-            return handleStop(interaction);
-          case 'spam':
-            return handleSpam(interaction);
-          case 'pause':
-            return handlePause(interaction);
-          case 'resume':
-            return handleResume(interaction);
-          case 'storage':
-            return handleStorage(interaction);
-          default:
-            return interaction.reply({
-              content: `Unknown subcommand: ${sub}`,
-              flags: MessageFlags.Ephemeral
-            });
-        }
+        // Auto-dismiss any plain-text reply after 30s. The helper checks for
+        // attached components first, so vote buttons and the paginated list
+        // are left alone.
+        scheduleDismiss(interaction);
+        return;
       }
 
       // --- Autocomplete dispatch -------------------------------------------
@@ -234,4 +192,35 @@ export function createBot() {
   });
 
   return client;
+}
+
+// Map (group, sub) -> handler. Returning null lets the dispatcher emit a
+// generic "unknown subcommand" reply with consistent formatting.
+function resolveHandler(group, sub) {
+  if (group === 'admin') {
+    if (sub === 'add') return handleAdminAdd;
+    if (sub === 'remove') return handleAdminRemove;
+    if (sub === 'list') return handleAdminList;
+    return null;
+  }
+  if (group === 'settings') {
+    if (sub === 'view') return handleSettingsView;
+    if (sub === 'set') return handleSettingsSet;
+    if (sub === 'unset') return handleSettingsUnset;
+    return null;
+  }
+  switch (sub) {
+    case 'upload': return handleUpload;
+    case 'play': return handlePlay;
+    case 'edit': return handleEdit;
+    case 'cut': return handleCut;
+    case 'delete': return handleDelete;
+    case 'list': return handleList;
+    case 'stop': return handleStop;
+    case 'spam': return handleSpam;
+    case 'pause': return handlePause;
+    case 'resume': return handleResume;
+    case 'storage': return handleStorage;
+    default: return null;
+  }
 }

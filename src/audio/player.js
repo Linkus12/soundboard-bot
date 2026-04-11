@@ -25,8 +25,44 @@ import { logger } from '../logger.js';
  */
 const sessions = new Map();
 
-function updateActivity(client) {
+// Discord rate-limits gateway presence updates (~5 per 20s). When several
+// sounds start in quick succession (e.g. /sb spam) we'd otherwise burn that
+// budget on intermediate states and the final "Playing nothing" gets dropped,
+// leaving the bot's status frozen on a stale sound name. Coalesce all
+// updateActivity calls into one trailing call after a quiet period.
+const ACTIVITY_DEBOUNCE_MS = 400;
+let activityTimer = null;
+let pendingClient = null;
+
+function scheduleActivityUpdate(client) {
+  if (!client) return;
+  pendingClient = client;
+  if (activityTimer) clearTimeout(activityTimer);
+  activityTimer = setTimeout(() => {
+    activityTimer = null;
+    const c = pendingClient;
+    pendingClient = null;
+    applyActivity(c);
+  }, ACTIVITY_DEBOUNCE_MS);
+}
+
+function applyActivity(client) {
   if (!client || !client.user) return;
+
+  // Spam takes priority over per-sound presence so a 13-source spam doesn't
+  // flash through 13 different "Playing X" states. Look for any session
+  // currently flagged as spamming and surface that first.
+  for (const session of sessions.values()) {
+    if (!session.spamming) continue;
+    const channel = client.channels.cache.get(session.channelId);
+    const channelName = channel ? channel.name : 'Unknown';
+    client.user.setActivity({
+      name: 'Custom Status',
+      state: `💣 Spamming ${channelName}`,
+      type: ActivityType.Custom
+    });
+    return;
+  }
 
   let latestSound = null;
   let latestTime = 0;
@@ -58,6 +94,25 @@ function updateActivity(client) {
       type: ActivityType.Custom
     });
   }
+}
+
+/**
+ * Flip a session's "spamming" flag so the bot's presence renders the
+ * spam-mode line instead of the per-sound line. Called by /sb spam at the
+ * start and end of a run.
+ */
+export function markSpamming(guildId, on) {
+  const session = sessions.get(guildId);
+  if (!session) return false;
+  session.spamming = !!on;
+  scheduleActivityUpdate(session.client);
+  return true;
+}
+
+// Kept for backwards-compat with the in-file callsites — they all go through
+// the debouncer now.
+function updateActivity(client) {
+  scheduleActivityUpdate(client);
 }
 
 // Idle disconnect after this long while paused.
@@ -139,8 +194,13 @@ async function createSession(guild, voiceChannel) {
     inlineVolume: false
   });
 
-  player.play(resource);
+  // Subscribe BEFORE play. The reverse order leaves the player briefly with
+  // no subscriber, so NoSubscriberBehavior.Pause flips it to AutoPaused; the
+  // player is supposed to auto-resume on subscribe but it's flaky under heavy
+  // burst load (observed when /sb spam adds 13 sources in ~16ms — the player
+  // never resumed and pushed silence the entire spam window).
   connection.subscribe(player);
+  player.play(resource);
 
   const session = {
     connection,
@@ -152,6 +212,7 @@ async function createSession(guild, voiceChannel) {
     pausedAt: null,
     pausedBy: null,
     pauseTimer: null,
+    spamming: false,
     client: guild.client
   };
   sessions.set(guild.id, session);

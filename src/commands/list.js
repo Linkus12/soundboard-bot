@@ -349,33 +349,15 @@ export async function handleList(interaction) {
   });
 
   collector.on('end', async () => {
+    // The list is interactive, so it's exempt from the bot-wide auto-dismiss
+    // (the dispatcher skips messages with components). When the collector
+    // finally goes idle, delete the message outright so it doesn't sit in
+    // chat forever as a frozen UI.
     try {
-      const filtered = applyFilters(allSounds, state.filters);
-      const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-      await interaction.editReply({
-        embeds: [
-          buildEmbed({
-            allCount: allSounds.length,
-            filtered,
-            page: state.page,
-            pageCount,
-            viewScope,
-            guild,
-            filters: state.filters,
-            uploaders
-          })
-        ],
-        components: buildComponents({
-          page: state.page,
-          pageCount,
-          filters: state.filters,
-          uploaders,
-          disabled: true
-        })
-      });
+      await interaction.deleteReply();
     } catch (err) {
-      // Ephemeral reply may be gone — nothing to do.
-      logger.debug?.('list: could not disable components on end', { err: err.message });
+      // Token expired or already gone — nothing to do.
+      logger.debug?.('list: could not delete reply on collector end', { err: err.message });
     }
   });
 }
