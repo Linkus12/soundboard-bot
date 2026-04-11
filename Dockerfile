@@ -24,7 +24,11 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY package*.json ./
 COPY src ./src
 
-RUN mkdir -p /app/sounds /app/data /app/logs
+RUN useradd -m -u 1000 soundboardbot \
+    && mkdir -p /app/sounds /app/data /app/logs \
+    && chown -R soundboardbot:soundboardbot /app
+
+USER soundboardbot
 
 ENV NODE_ENV=production
 
