@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { config } from '../config.js';
 import { queries } from '../db/database.js';
 import { probeDuration, convertToOpus } from '../audio/converter.js';
 import {
