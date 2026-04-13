@@ -13,10 +13,22 @@ import { replyFlags } from './visibility.js';
 // bot never turns into a permanent wall of noise.
 const SPAM_DURATION_MS = 7000;
 
-// Concurrent ffmpeg source cap. Each sound spawns its own decoder process,
-// so unbounded spam could exhaust file descriptors or pin the CPU. 100 is
-// comfortably above a typical soundboard while still being survivable.
-const SPAM_MAX_SOUNDS = 100;
+// Concurrent ffmpeg source cap. Starting too many decoders at once can cause
+// most of them to miss their startup window and only be audible near the end.
+const SPAM_MAX_SOUNDS = 15;
+const SPAM_SPAWN_DELAY_MS = 50;
+
+function sleep(ms) {
+  return new Promise(resolve => globalThis.setTimeout(resolve, ms));
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
 
 export async function handleSpam(interaction) {
   const guild = interaction.guild;
@@ -78,7 +90,7 @@ export async function handleSpam(interaction) {
 
   await interaction.deferReply({ flags: replyFlags(interaction) });
 
-  const sounds = allSounds.slice(0, SPAM_MAX_SOUNDS);
+  const sounds = shuffle(allSounds.slice()).slice(0, SPAM_MAX_SOUNDS);
   const skipped = allSounds.length - sounds.length;
 
   let started = 0;
@@ -101,6 +113,10 @@ export async function handleSpam(interaction) {
     } catch (err) {
       failed++;
       logger.error('spam: play failed', { name: sound.name, err: err.message });
+    }
+
+    if (started + failed < sounds.length) {
+      await sleep(SPAM_SPAWN_DELAY_MS);
     }
   }
 
@@ -144,7 +160,7 @@ export async function handleSpam(interaction) {
   const noteParts = [];
   if (missing > 0) noteParts.push(`${missing} missing from disk`);
   if (failed > 0) noteParts.push(`${failed} failed`);
-  if (skipped > 0) noteParts.push(`${skipped} skipped (over ${SPAM_MAX_SOUNDS} cap)`);
+  if (skipped > 0) noteParts.push(`${skipped} not selected (pool capped at ${SPAM_MAX_SOUNDS})`);
   const note = noteParts.length ? ` *(${noteParts.join(', ')})*` : '';
 
   return interaction.editReply(

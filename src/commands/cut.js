@@ -29,19 +29,25 @@ export async function handleCut(interaction) {
     );
   }
 
+  const originalDuration = sound.duration_seconds;
+  const durationLabel =
+    `**${displayName(sound.name)}** is currently **${originalDuration.toFixed(3)}s** long.`;
+
   const start = parseTimeString(interaction.options.getString('start', true));
   const end = parseTimeString(interaction.options.getString('end', true));
   if (start === null || end === null) {
     return interaction.editReply(
-      'Invalid time format. Use `MM:SS`, `HH:MM:SS`, or plain seconds (e.g. `12.5`).'
+      `${durationLabel}\nUse seconds like \`12.500\` or \`0.250\`, or \`MM:SS\` / \`HH:MM:SS\`.`
     );
   }
   if (start < 0 || end <= start) {
-    return interaction.editReply('`start` must be ≥ 0 and `end` must be greater than `start`.');
+    return interaction.editReply(
+      `${durationLabel}\n\`start\` must be 0 or more, and \`end\` must be greater than \`start\`.`
+    );
   }
   if (end > sound.duration_seconds + 0.05) {
     return interaction.editReply(
-      `\`end\` (${end.toFixed(2)}s) is past the sound's length (${sound.duration_seconds.toFixed(2)}s).`
+      `${durationLabel}\n\`end\` (${end.toFixed(3)}s) is past the sound's length.`
     );
   }
 
@@ -73,14 +79,15 @@ export async function handleCut(interaction) {
       name: sound.name,
       start,
       end,
+      originalDuration,
       newDuration,
       newSize: newStats.size,
       by: actor
     });
 
     await interaction.editReply(
-      `✂ Trimmed **${displayName(sound.name)}** to ${start.toFixed(2)}s–${end.toFixed(2)}s ` +
-        `(now ${newDuration.toFixed(1)}s, ${formatBytes(newStats.size)}).`
+      `✂ Cut **${displayName(sound.name)}** from ${start.toFixed(3)}s to ${end.toFixed(3)}s.\n` +
+        `Duration: **${originalDuration.toFixed(3)}s** → **${newDuration.toFixed(3)}s** (${formatBytes(newStats.size)}).`
     );
   } catch (err) {
     logger.error('cut failed', { id: sound.id, err: err.message });
