@@ -16,7 +16,7 @@ const SPAM_DURATION_MS = 10000;
 // Concurrent ffmpeg source cap. Starting too many decoders at once can cause
 // most of them to miss their startup window and only be audible near the end.
 const SPAM_MAX_SOUNDS = 15;
-const SPAM_SPAWN_DELAY_MS = 150;
+const SPAM_SPAWN_DELAY_MS = 75;
 
 function sleep(ms) {
   return new Promise(resolve => globalThis.setTimeout(resolve, ms));
