@@ -65,9 +65,8 @@ export async function handleCut(interaction) {
     return interaction.editReply(`The file for **${displayName(sound.name)}** is missing from disk.`);
   }
 
-  const tempDir = path.join(config.dataDir, 'temp');
-  fs.mkdirSync(tempDir, { recursive: true });
-  const tempOut = path.join(tempDir, `${crypto.randomBytes(8).toString('hex')}-cut.ogg`);
+  fs.mkdirSync(config.soundsDir, { recursive: true });
+  const tempOut = path.join(config.soundsDir, `${crypto.randomBytes(8).toString('hex')}-cut.tmp.ogg`);
 
   try {
     await trimOpus(sourcePath, tempOut, start, end);
@@ -77,9 +76,7 @@ export async function handleCut(interaction) {
     const newDuration = await probeDuration(tempOut);
     const newStats = fs.statSync(tempOut);
 
-    // Atomic replace. On Windows, fs.renameSync replaces existing files since
-    // Node 10.x; if it ever breaks we'd need to unlink first.
-    fs.renameSync(tempOut, sourcePath);
+    replaceFile(tempOut, sourcePath);
     queries.updateAfterTrim.run(newDuration, newStats.size, sound.id);
 
     logger.ok('sound trimmed', {
@@ -110,5 +107,18 @@ function safeUnlink(p) {
     if (fs.existsSync(p)) fs.unlinkSync(p);
   } catch (err) {
     logger.warn('cut: temp unlink failed', { path: p, err: err.message });
+  }
+}
+
+function replaceFile(tempPath, destinationPath) {
+  try {
+    fs.renameSync(tempPath, destinationPath);
+  } catch (err) {
+    if (err?.code !== 'EXDEV') {
+      throw err;
+    }
+
+    fs.copyFileSync(tempPath, destinationPath);
+    safeUnlink(tempPath);
   }
 }
