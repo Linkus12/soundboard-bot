@@ -41,19 +41,26 @@ export async function handleSpam(interaction) {
     });
   }
 
-  const voiceChannel = member.voice?.channel;
-  if (!voiceChannel) {
+  const userVoice = member.voice?.channel;
+  const providedChannel = interaction.options.getChannel('channel');
+
+  let targetChannel;
+  if (providedChannel) {
+    targetChannel = providedChannel;
+  } else if (userVoice) {
+    targetChannel = userVoice;
+  } else {
     return interaction.reply({
-      content: 'You need to be in a voice channel to spam.',
+      content: 'You need to be in a voice channel, or pass `channel:` to pick one.',
       flags: replyFlags(interaction)
     });
   }
 
   const me = await guild.members.fetchMe();
-  const perms = voiceChannel.permissionsFor(me);
+  const perms = targetChannel.permissionsFor(me);
   if (!perms?.has(PermissionFlagsBits.Connect) || !perms?.has(PermissionFlagsBits.Speak)) {
     return interaction.reply({
-      content: `I don't have permission to connect or speak in <#${voiceChannel.id}>.`,
+      content: `I don't have permission to connect or speak in <#${targetChannel.id}>.`,
       flags: replyFlags(interaction)
     });
   }
@@ -77,11 +84,11 @@ export async function handleSpam(interaction) {
   // Admin override: if a session is already running in a different channel,
   // tear it down before starting the spam. Same pattern as /sb play.
   const existing = getSession(guild.id);
-  if (existing && existing.channelId !== voiceChannel.id) {
+  if (existing && existing.channelId !== targetChannel.id) {
     logger.info('admin overriding channel lock for spam', {
       guildId: guild.id,
       from: existing.channelId,
-      to: voiceChannel.id,
+      to: targetChannel.id,
       userId: member.id
     });
     stopSession(guild.id, 'admin-spam-override');
@@ -108,7 +115,7 @@ export async function handleSpam(interaction) {
       continue;
     }
     try {
-      await playSound(guild, voiceChannel, filePath, sound.name, member.id, {
+      await playSound(guild, targetChannel, filePath, sound.name, member.id, {
         maxDurationSeconds: SPAM_DURATION_MS / 1000
       });
       started++;

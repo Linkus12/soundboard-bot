@@ -238,7 +238,9 @@ export async function handleUpload(interaction) {
     if (outPath) safeUnlink(outPath);
     try {
       await interaction.editReply(err.userMessage || 'Upload failed due to an unexpected error. Check the logs.');
-    } catch {}
+    } catch (replyErr) {
+      logger.error('failed to send upload error message', { err: replyErr.message });
+    }
   }
 }
 

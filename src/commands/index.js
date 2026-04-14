@@ -138,6 +138,12 @@ function buildSlashCommand(name) {
         s
           .setName('spam')
           .setDescription(`${LOCK}Play every sound at once for 7s (admin only)`)
+          .addChannelOption(o =>
+            o
+              .setName('channel')
+              .setDescription('Voice channel to spam in (defaults to your current channel)')
+              .addChannelTypes(ChannelType.GuildVoice)
+          )
       )
     )
     .addSubcommand(s =>
