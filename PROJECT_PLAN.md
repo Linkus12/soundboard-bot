@@ -69,8 +69,13 @@ Every command is registered under both `/sb` and `/soundboard`.
 
 | Command | Description |
 |---|---|
-| `/sb upload name:<text> [file:<attachment>] [youtube_url:<text>]` | Upload audio/video file or YouTube link. Exactly one source required. Names accept spaces/hyphens/underscores; stored kebab-case, displayed with spaces. Tag (global vs private) follows the server's `upload_scope`. |
+| `/sb upload name:<text> [file:<attachment>] [youtube_url:<text>]` | Upload audio/video file or YouTube link. Exactly one source required. Names accept spaces/hyphens/underscores; stored kebab-case, displayed with spaces. Tag (global vs private) follows the server's `upload_scope`. Admins bypass the storage hard cap (owner always does). |
 | `/sb play name:<text>` | Play a sound. Overlaps current playback if same channel. Blocked cross-channel for non-admins. Visibility honours `view_scope`. |
+| `/sb quickplay youtube_url:<text> [channel:<channel>]` | Play a YouTube link without saving it — audio is downloaded to a temp file and deleted when playback finishes. Same caps as `/sb upload` (owner unlimited, admin 200 MB / no duration cap, user 100 MB / `max_duration_seconds`). |
+| `/sb playlist tag:<text> [channel:<channel>]` | Play every sound carrying a given tag, in sequence. Scope follows `view_scope`. Missing files are skipped. |
+| `/sb tag add name:<text> tag:<text>` | Attach a tag to a sound. Uploader, admin, or owner. Max 10 tags per sound, 1–32 chars `[a-zA-Z0-9_-]`. |
+| `/sb tag remove name:<text> tag:<text>` | Remove a tag from a sound. Same permissions as `tag add`. |
+| `/sb tag list [name:<text>]` | With `name:` → tags on that sound; without → every tag visible under `view_scope`. |
 | `/sb edit name:<text> new_name:<text>` | Rename a sound. Uploader or owner only. |
 | `/sb cut name:<text> start:<text> end:<text>` | Trim a sound in place. Uploader or owner only. Times accept `MM:SS`, `HH:MM:SS`, or seconds. |
 | `/sb delete name:<text>` 🔒 | Uploader, admin of the source server, or owner. |
@@ -81,7 +86,7 @@ Every command is registered under both `/sb` and `/soundboard`.
 | `/sb admin add\|remove\|list user:<@user>` 🔒 | Manage **per-server** bot admin list. Owner is implicit admin everywhere. |
 | `/sb settings view\|set\|unset key:<choice> [value:<text>]` 🔒 | Per-server runtime settings. Some keys are owner-only. |
 
-Autocomplete is enabled on the `name` option for every command that takes one. Lookups use a canonical match form so users can type the name with any combination of spaces, hyphens, and underscores.
+Autocomplete is enabled on the `name` option for every command that takes one. Lookups use a canonical match form so users can type the name with any combination of spaces, hyphens, and underscores. Tag inputs (`/sb playlist tag:`, `/sb tag remove tag:`) also autocomplete against the current `view_scope`.
 
 ---
 
@@ -148,6 +153,9 @@ Soundboard Bot/
 │       ├── index.js          # Slash command definition (/sb with subcommands)
 │       ├── upload.js
 │       ├── play.js
+│       ├── quickplay.js      # /sb quickplay — transient YouTube playback
+│       ├── tag.js            # /sb tag add|remove|list
+│       ├── taggedplaylist.js # /sb playlist
 │       ├── delete.js
 │       ├── list.js
 │       ├── stop.js
@@ -188,6 +196,15 @@ CREATE TABLE admins (
   added_by  TEXT NOT NULL,
   added_at  INTEGER NOT NULL
 );
+
+CREATE TABLE sound_tags (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  sound_id    INTEGER NOT NULL REFERENCES sounds(id) ON DELETE CASCADE,
+  tag         TEXT    NOT NULL COLLATE NOCASE,
+  created_by  TEXT    NOT NULL,
+  created_at  INTEGER NOT NULL,
+  UNIQUE (sound_id, tag)
+);
 ```
 
 Sounds are **global across all guilds** — names are unique everywhere the bot runs.
@@ -221,6 +238,14 @@ Admins are also global — the bot is designed for a single deployment where adm
 - Dropped the privileged `GuildMembers` intent — no longer needed after the admin refactor, simpler bot setup.
 - Added `.github/workflows/docker.yml` to auto-build and push to ghcr.io on every push to `main`.
 - Added `docker-compose.prod.yml` for pulling pre-built images on Unraid.
+
+### 2026-04-16 — Tags, playlists, quickplay
+- New `sound_tags` table (unique on `(sound_id, tag)`, FK-cascade on sound delete, case-insensitive index on `tag`). Tags are lowercase `[a-zA-Z0-9_-]{1,32}`, max 10 per sound.
+- New commands: `/sb tag add|remove|list`, `/sb playlist tag:`, `/sb quickplay youtube_url:`. Sequencing for the playlist reuses the mixer via a new `options.onComplete` callback threaded through `playSound` → `mixer.addSource.onFinish`.
+- `/sb quickplay` runs the same yt-dlp caps as `/sb upload` (owner unlimited, admin 200 MB / no duration cap, user 100 MB / `max_duration_seconds`). The temp file lives under `data/temp/` and is deleted by the `onComplete` hook.
+- Admins now bypass the storage hard cap in `/sb upload` (previously owner-only). Soft-cap DM warnings are unchanged.
+- Tag inputs get autocomplete; `name` autocomplete was already wired.
+- Naming: new files keep to the existing camelCase convention throughout.
 
 ### 2026-04-10 — Per-guild rework + edit/cut/pause
 - Per-guild settings layer (`guild_settings` table + `src/settings.js`) with env values as defaults. Settable keys: `max_file_size_mb`, `max_duration_seconds`, `max_sounds_per_user`, `spam_pool_size`, `upload_scope`, `view_scope`, `admin_mode`, `storage_warn_gb_override`, `storage_hard_gb_override`. The two storage overrides and `admin_mode` are owner-only.
