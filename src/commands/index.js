@@ -65,6 +65,22 @@ function buildSlashCommand(name) {
           )
       )
     )
+
+    .addSubcommand( s =>
+      withVisibility(
+        s
+          .setName('Playlist')
+          .setDescription('Play a playlist of sounds tagged with a common keyword I guess? Basically tags')
+          .addStringOption(o =>
+            o
+              .setName('tag')
+              .setDescription('Playlist name (tags)')
+              .setRequired(true)
+              .setAutocomplete(true)
+          )
+      )
+    )
+
     .addSubcommand(s =>
       withVisibility(
         s
@@ -162,6 +178,66 @@ function buildSlashCommand(name) {
     )
     .addSubcommand(s =>
       withVisibility(s.setName('storage').setDescription('Show soundboard storage usage'))
+    )
+    .addSubcommand(s =>
+      withVisibility(
+        s
+          .setName('quickplay')
+          .setDescription('Play a YouTube link without saving it — temp file auto-deleted after playback')
+          .addStringOption(o =>
+            o
+              .setName('youtube_url')
+              .setDescription('YouTube video URL to play')
+              .setRequired(true)
+          )
+          .addChannelOption(o =>
+            o
+              .setName('channel')
+              .setDescription('Voice channel to play in (defaults to your current channel)')
+              .addChannelTypes(ChannelType.GuildVoice)
+          )
+      )
+    )
+    .addSubcommandGroup(g =>
+      g
+        .setName('tag')
+        .setDescription('Manage sound tags')
+        .addSubcommand(s =>
+          withVisibility(
+            s
+              .setName('add')
+              .setDescription('Add a tag to a sound (uploader or admin)')
+              .addStringOption(o =>
+                o.setName('name').setDescription('Sound name').setRequired(true).setAutocomplete(true)
+              )
+              .addStringOption(o =>
+                o.setName('tag').setDescription('Tag to add (letters, numbers, hyphens)').setRequired(true)
+              )
+          )
+        )
+        .addSubcommand(s =>
+          withVisibility(
+            s
+              .setName('remove')
+              .setDescription('Remove a tag from a sound (uploader or admin)')
+              .addStringOption(o =>
+                o.setName('name').setDescription('Sound name').setRequired(true).setAutocomplete(true)
+              )
+              .addStringOption(o =>
+                o.setName('tag').setDescription('Tag to remove').setRequired(true).setAutocomplete(true)
+              )
+          )
+        )
+        .addSubcommand(s =>
+          withVisibility(
+            s
+              .setName('list')
+              .setDescription('List all tags, or tags on a specific sound')
+              .addStringOption(o =>
+                o.setName('name').setDescription('Sound name (optional — omit to list all tags)').setAutocomplete(true)
+              )
+          )
+        )
     )
     .addSubcommandGroup(g =>
       g

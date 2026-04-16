@@ -16,6 +16,7 @@ import { getSetting } from '../settings.js';
 import { storeName, displayName, canonicalize } from '../names.js';
 import { logger } from '../logger.js';
 import { replyFlags } from './visibility.js';
+import { measureMemory } from 'node:vm';
 
 // Hardcoded absolute ceiling — applies even to admins.
 const ADMIN_HARD_CAP_MB = 200;
@@ -34,7 +35,7 @@ export async function handleUpload(interaction) {
 
   const guild = interaction.guild;
   const owner = isOwner(interaction.user.id);
-  const admin = isAdmin(guild, interaction.user.id);
+  const admin = isAdmin(guild, interaction.user.id, interaction.member);
 
   // --- Must provide exactly one source -------------------------------------
   if (!attachment && !youtubeUrl) {
@@ -85,7 +86,7 @@ export async function handleUpload(interaction) {
   // --- Storage hard lock (applies to everyone except the bot owner) --------
   const totalBytes = getTotalBytes();
   const hardLimitBytes = getEffectiveHardLimitBytes(guild.id);
-  if (!owner && totalBytes >= hardLimitBytes) {
+  if (!owner && !admin && totalBytes >= hardLimitBytes) {
     logger.warn('upload blocked — storage hard cap reached', {
       userId: interaction.user.id,
       total: totalBytes,

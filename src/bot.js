@@ -29,6 +29,9 @@ import {
   handleResumeVoteButton
 } from './commands/pause.js';
 import { scheduleDismiss } from './commands/visibility.js';
+import { handleQuickPlay } from './commands/quickplay.js';
+import { handleTagAdd, handleTagRemove, handleTagList } from './commands/tag.js';
+import { handleTaggedPlaylist } from './commands/taggedplaylist.js';
 
 // Both /sb and /soundboard route to the same handlers.
 const COMMAND_NAMES = new Set(['sb', 'soundboard']);
@@ -197,6 +200,12 @@ export function createBot() {
 // Map (group, sub) -> handler. Returning null lets the dispatcher emit a
 // generic "unknown subcommand" reply with consistent formatting.
 function resolveHandler(group, sub) {
+  if (group === 'tag') {
+    if (sub === 'add') return handleTagAdd;
+    if (sub === 'remove') return handleTagRemove;
+    if (sub === 'list') return handleTagList;
+    return null;
+  }
   if (group === 'admin') {
     if (sub === 'add') return handleAdminAdd;
     if (sub === 'remove') return handleAdminRemove;
@@ -220,6 +229,7 @@ function resolveHandler(group, sub) {
     case 'spam': return handleSpam;
     case 'pause': return handlePause;
     case 'resume': return handleResume;
+    case 'quickplay': return handleQuickPlay;
     case 'storage': return handleStorage;
     default: return null;
   }

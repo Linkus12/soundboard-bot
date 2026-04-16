@@ -49,6 +49,17 @@ db.exec(`
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (guild_id, key)
   );
+
+  CREATE TABLE IF NOT EXISTS sound_tags (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    sound_id    INTEGER NOT NULL REFERENCES sounds(id) ON DELETE CASCADE,
+    tag         TEXT    NOT NULL COLLATE NOCASE,
+    created_by  TEXT    NOT NULL,
+    created_at  INTEGER NOT NULL,
+    UNIQUE (sound_id, tag)
+  );
+  CREATE INDEX IF NOT EXISTS idx_sound_tags_sound ON sound_tags(sound_id);
+  CREATE INDEX IF NOT EXISTS idx_sound_tags_tag   ON sound_tags(tag COLLATE NOCASE);
 `);
 
 // --- Schema migrations: add columns added after initial release -------------
@@ -176,7 +187,46 @@ export const queries = {
       updated_by = excluded.updated_by,
       updated_at = excluded.updated_at
   `),
-  deleteSetting: db.prepare('DELETE FROM guild_settings WHERE guild_id = ? AND key = ?')
+  deleteSetting: db.prepare('DELETE FROM guild_settings WHERE guild_id = ? AND key = ?'),
+  // --- Tags -----------------------------------------------------------------
+  addTag: db.prepare(`
+    INSERT OR IGNORE INTO sound_tags (sound_id, tag, created_by, created_at)
+    VALUES (?, ?, ?, ?)
+  `),
+  removeTag: db.prepare(
+    'DELETE FROM sound_tags WHERE sound_id = ? AND tag = ? COLLATE NOCASE'
+  ),
+  getTagsForSound: db.prepare(
+    'SELECT tag FROM sound_tags WHERE sound_id = ? ORDER BY tag COLLATE NOCASE ASC'
+  ),
+  getSoundsForTag: db.prepare(`
+    SELECT sounds.* FROM sounds
+    JOIN sound_tags ON sounds.id = sound_tags.sound_id
+    WHERE sound_tags.tag = ? COLLATE NOCASE
+      AND sounds.is_private = 0
+    ORDER BY sounds.name COLLATE NOCASE ASC
+  `),
+  getSoundsForTagInGuild: db.prepare(`
+    SELECT sounds.* FROM sounds
+    JOIN sound_tags ON sounds.id = sound_tags.sound_id
+    WHERE sound_tags.tag = ? COLLATE NOCASE
+      AND sounds.guild_id = ?
+    ORDER BY sounds.name COLLATE NOCASE ASC
+  `),
+  searchTagsGlobal: db.prepare(`
+    SELECT DISTINCT sound_tags.tag FROM sound_tags
+    JOIN sounds ON sounds.id = sound_tags.sound_id
+    WHERE sounds.is_private = 0 AND sound_tags.tag LIKE ? ESCAPE '\\'
+    ORDER BY sound_tags.tag COLLATE NOCASE ASC
+    LIMIT 25
+  `),
+  searchTagsForGuild: db.prepare(`
+    SELECT DISTINCT sound_tags.tag FROM sound_tags
+    JOIN sounds ON sounds.id = sound_tags.sound_id
+    WHERE sounds.guild_id = ? AND sound_tags.tag LIKE ? ESCAPE '\\'
+    ORDER BY sound_tags.tag COLLATE NOCASE ASC
+    LIMIT 25
+  `)
 };
 
 export default db;
