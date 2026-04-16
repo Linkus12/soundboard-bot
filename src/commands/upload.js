@@ -85,7 +85,7 @@ export async function handleUpload(interaction) {
   // --- Storage hard lock (applies to everyone except the bot owner) --------
   const totalBytes = getTotalBytes();
   const hardLimitBytes = getEffectiveHardLimitBytes(guild.id);
-  if (!owner && totalBytes >= hardLimitBytes) {
+  if (!owner && !admin && totalBytes >= hardLimitBytes) {
     logger.warn('upload blocked — storage hard cap reached', {
       userId: interaction.user.id,
       total: totalBytes,

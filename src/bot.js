@@ -29,6 +29,9 @@ import {
   handleResumeVoteButton
 } from './commands/pause.js';
 import { scheduleDismiss } from './commands/visibility.js';
+import { handleQuickPlay } from './commands/quickplay.js';
+import { handleTagAdd, handleTagRemove, handleTagList } from './commands/tag.js';
+import { handleTaggedPlaylist } from './commands/taggedplaylist.js';
 
 // Both /sb and /soundboard route to the same handlers.
 const COMMAND_NAMES = new Set(['sb', 'soundboard']);
@@ -109,6 +112,24 @@ export function createBot() {
             name: displayName(s.name),
             value: s.name
           }));
+          return interaction.respond(choices);
+        }
+
+        // Tag autocomplete — used by `/sb playlist tag:`, `/sb tag remove tag:`.
+        // Scope matches view_scope: `guild` lists only tags on guild-local
+        // sounds, `global` lists tags on all public sounds.
+        if (focused.name === 'tag') {
+          const query = String(focused.value || '').toLowerCase();
+          const canonical = query.replace(/[%_]/g, '');
+          const pattern = `%${canonical}%`;
+
+          const viewScope = getSetting(interaction.guild.id, 'view_scope');
+          const rows =
+            viewScope === 'guild'
+              ? queries.searchTagsForGuild.all(interaction.guild.id, pattern)
+              : queries.searchTagsGlobal.all(pattern);
+
+          const choices = rows.slice(0, 25).map(r => ({ name: r.tag, value: r.tag }));
           return interaction.respond(choices);
         }
 
@@ -197,6 +218,12 @@ export function createBot() {
 // Map (group, sub) -> handler. Returning null lets the dispatcher emit a
 // generic "unknown subcommand" reply with consistent formatting.
 function resolveHandler(group, sub) {
+  if (group === 'tag') {
+    if (sub === 'add') return handleTagAdd;
+    if (sub === 'remove') return handleTagRemove;
+    if (sub === 'list') return handleTagList;
+    return null;
+  }
   if (group === 'admin') {
     if (sub === 'add') return handleAdminAdd;
     if (sub === 'remove') return handleAdminRemove;
@@ -220,6 +247,8 @@ function resolveHandler(group, sub) {
     case 'spam': return handleSpam;
     case 'pause': return handlePause;
     case 'resume': return handleResume;
+    case 'quickplay': return handleQuickPlay;
+    case 'playlist': return handleTaggedPlaylist;
     case 'storage': return handleStorage;
     default: return null;
   }

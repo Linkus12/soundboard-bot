@@ -140,6 +140,13 @@ export async function playSound(guild, voiceChannel, soundFilePath, soundName, u
       session.playing.delete(sourceId);
       logger.ok('sound finished', { guildId: guild.id, sound: soundName, userId });
       updateActivity(guild.client);
+      if (typeof options.onComplete === 'function') {
+        try {
+          options.onComplete();
+        } catch (err) {
+          logger.error('onComplete callback threw', { sound: soundName, err: err.message });
+        }
+      }
     }, options);
 
     if (sourceId === null) {
